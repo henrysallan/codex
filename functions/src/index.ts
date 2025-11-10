@@ -62,7 +62,7 @@ export const getUploadUrl = functions
       const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
 
       // Also generate the public URL for accessing the file
-      const publicUrl = `https://pub-${r2AccountId.value()}.r2.dev/${key}`;
+      const publicUrl = `https://pub-977a7d4b63c4438980570a32245b687b.r2.dev/${key}`;
 
       return {
         uploadUrl,
