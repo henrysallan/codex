@@ -2,9 +2,15 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import Anthropic from '@anthropic-ai/sdk';
 import { defineSecret } from 'firebase-functions/params';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Define secrets (they won't be in the code or GitHub)
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
+const r2AccessKeyId = defineSecret('R2_ACCESS_KEY_ID');
+const r2SecretAccessKey = defineSecret('R2_SECRET_ACCESS_KEY');
+const r2AccountId = defineSecret('R2_ACCOUNT_ID');
+const r2BucketName = defineSecret('R2_BUCKET_NAME');
 
 admin.initializeApp();
 
@@ -15,30 +21,152 @@ export const healthCheck = functions.https.onRequest((req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// TODO: Uncomment when R2 is set up
-/*
-export const getUploadUrl = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
-  }
-  const { fileName, fileType } = data;
-  const userId = context.auth.uid;
-  // TODO: Implement R2 presigned URL generation
-  return {
-    url: 'https://placeholder-url.com',
-    key: `uploads/${userId}/${Date.now()}-${fileName}`,
-  };
-});
+/**
+ * Generate a presigned URL for uploading files to R2
+ */
+export const getUploadUrl = functions
+  .runWith({ 
+    secrets: [r2AccessKeyId, r2SecretAccessKey, r2AccountId, r2BucketName] 
+  })
+  .https.onCall(async (data: { fileName: string; fileType: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
 
-export const processContent = functions.firestore
+    const { fileName, fileType } = data;
+    const userId = context.auth.uid;
+    
+    // Generate a unique key for the file
+    const timestamp = Date.now();
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const key = `uploads/${userId}/${timestamp}-${sanitizedFileName}`;
+
+    try {
+      // Configure R2 client (S3-compatible)
+      const s3Client = new S3Client({
+        region: 'auto',
+        endpoint: `https://${r2AccountId.value()}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: r2AccessKeyId.value(),
+          secretAccessKey: r2SecretAccessKey.value(),
+        },
+      });
+
+      // Create presigned URL for PUT operation
+      const command = new PutObjectCommand({
+        Bucket: r2BucketName.value(),
+        Key: key,
+        ContentType: fileType,
+      });
+
+      const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour
+
+      // Also generate the public URL for accessing the file
+      const publicUrl = `https://pub-${r2AccountId.value()}.r2.dev/${key}`;
+
+      return {
+        uploadUrl,
+        key,
+        publicUrl,
+      };
+    } catch (error: any) {
+      console.error('Error generating upload URL:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        'Failed to generate upload URL',
+        error.message
+      );
+    }
+  });
+
+/**
+ * Process new content when it's added to Firestore
+ * Automatically trigger image tagging
+ */
+export const processContent = functions
+  .runWith({ secrets: [anthropicApiKey] })
+  .firestore
   .document('items/{itemId}')
   .onCreate(async (snap, context) => {
     const data = snap.data();
-    console.log('Processing new content:', data.title);
-    // TODO: Implement processing pipeline
+    const itemId = context.params.itemId;
+    
+    console.log('Processing new content:', data.title, itemId);
+
+    // If it's an image, automatically generate tags
+    if (data.type === 'image' && data.url) {
+      try {
+        console.log('Auto-tagging image:', data.url);
+        
+        // Call the generateImageTags function internally
+        // Note: In production, you might want to use a task queue
+        const anthropic = new Anthropic({
+          apiKey: anthropicApiKey.value(),
+        });
+
+        const imageResponse = await fetch(data.url);
+        const imageBuffer = await imageResponse.arrayBuffer();
+        const base64Image = Buffer.from(imageBuffer).toString('base64');
+
+        const response = await anthropic.messages.create({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: data.fileType || 'image/jpeg',
+                    data: base64Image,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: `Analyze this image and provide:
+1. A concise title (max 50 characters)
+2. 5-10 relevant tags (single words or short phrases)
+3. A brief description (1-2 sentences)
+
+Return as JSON in this format:
+{
+  "title": "...",
+  "tags": ["tag1", "tag2", ...],
+  "description": "..."
+}`,
+                },
+              ],
+            },
+          ],
+        });
+
+        const content = response.content[0];
+        if (content.type === 'text') {
+          const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const result = JSON.parse(jsonMatch[0]);
+            
+            // Update the document with AI-generated tags
+            await snap.ref.update({
+              aiTitle: result.title,
+              aiTags: result.tags,
+              aiDescription: result.description,
+              processedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            
+            console.log('Successfully tagged image:', itemId);
+          }
+        }
+      } catch (error) {
+        console.error('Error auto-tagging image:', error);
+        // Don't throw - we don't want to fail the whole operation
+      }
+    }
+
     return null;
   });
-*/
 
 /**
  * Generate tags for an image using Claude Haiku
