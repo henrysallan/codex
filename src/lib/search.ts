@@ -1,4 +1,4 @@
-import { ContentItem, SearchResult } from '../types';
+import type { ContentItem, SearchResult } from '../types';
 import { generateEmbedding, cosineSimilarity } from './embeddings';
 
 /**

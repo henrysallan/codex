@@ -5,7 +5,7 @@ import type { ContentItem } from './types';
 
 function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [items, setItems] = useState<ContentItem[]>([]);
+  const [items] = useState<ContentItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
 
   // Handle keyboard shortcuts

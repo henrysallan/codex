@@ -12,7 +12,7 @@ export default function GraphNode({ item }: GraphNodeProps) {
   const [hovered, setHovered] = useState(false);
 
   // Physics simulation
-  useFrame((state, delta) => {
+  useFrame(() => {
     if (!meshRef.current) return;
 
     // TODO: Implement physics forces

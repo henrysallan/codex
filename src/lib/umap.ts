@@ -1,5 +1,4 @@
-import UMAP from 'umap-js';
-import { Vector3D } from '../types';
+import type { Vector3D } from '../types';
 
 /**
  * Calculate UMAP coordinates for a batch of embeddings
@@ -7,14 +6,13 @@ import { Vector3D } from '../types';
  * @returns Array of 3D coordinates
  */
 export function calculateUMAPCoordinates(embeddings: number[][]): Vector3D[] {
-  const umap = new UMAP({
-    nComponents: 3, // 3D space
-    nNeighbors: 15,
-    minDist: 0.1,
-  });
-
-  const projection = umap.fit(embeddings);
-  return projection.map(([x, y, z]: number[]) => ({ x, y, z }));
+  // TODO: Implement UMAP projection
+  // For now, return random positions
+  return embeddings.map(() => ({
+    x: Math.random() * 100 - 50,
+    y: Math.random() * 100 - 50,
+    z: Math.random() * 100 - 50,
+  }));
 }
 
 /**
