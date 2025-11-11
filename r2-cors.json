@@ -1,0 +1,25 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://codex-1163f.web.app",
+      "https://codex-1163f.firebaseapp.com",
+      "http://localhost:5173",
+      "http://localhost:4173"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "PUT",
+      "POST",
+      "DELETE",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "*"
+    ],
+    "ExposeHeaders": [
+      "ETag",
+      "Content-Length"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]

@@ -18,9 +18,10 @@ export async function semanticSearch(
 
   // Calculate cosine similarity for each item
   const results = items
+    .filter((item) => item.embedding) // Only include items with embeddings
     .map((item) => ({
       item,
-      similarity: cosineSimilarity(queryEmbedding, item.embedding),
+      similarity: cosineSimilarity(queryEmbedding, item.embedding!),
     }))
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
@@ -48,7 +49,7 @@ export function textSearch(query: string, items: ContentItem[]): ContentItem[] {
 export function tagSearch(query: string, items: ContentItem[]): ContentItem[] {
   const lowerQuery = query.toLowerCase();
   return items.filter((item) =>
-    item.tags.some((tag) => tag.toLowerCase().includes(lowerQuery))
+    item.tags?.some((tag) => tag.toLowerCase().includes(lowerQuery))
   );
 }
 

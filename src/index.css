@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Editor.js styles */
+@import url('https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest/dist/editorjs.min.css');
+
 * {
   border-color: #e5e7eb;
 }
@@ -13,4 +16,97 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* CRITICAL: Editor.js custom styles - Must be at the END and use higher specificity */
+/* These target h1-h6 elements inside .ce-header to override Tailwind's base layer */
+.ce-block .ce-header h1,
+.ce-block .ce-header h2,
+.ce-block .ce-header h3,
+.ce-block .ce-header h4,
+.ce-block .ce-header h5,
+.ce-block .ce-header h6,
+.ce-block .ce-header {
+  all: unset;
+  display: block;
+  padding: 0.4em 0 !important;
+  margin: 0 !important;
+  line-height: 1.25 !important;
+  font-weight: bold !important;
+  color: inherit !important;
+}
+
+.ce-block .ce-header[data-level="1"],
+.ce-block .ce-header h1 {
+  font-size: 3.5em !important;
+  font-weight: 800 !important;
+  margin-top: 0.5em !important;
+  margin-bottom: 0.3em !important;
+  letter-spacing: -0.02em !important;
+}
+
+.ce-block .ce-header[data-level="2"],
+.ce-block .ce-header h2 {
+  font-size: 2.75em !important;
+  font-weight: 700 !important;
+  margin-top: 0.5em !important;
+  margin-bottom: 0.3em !important;
+  letter-spacing: -0.01em !important;
+}
+
+.ce-block .ce-header[data-level="3"],
+.ce-block .ce-header h3 {
+  font-size: 2em !important;
+  font-weight: 600 !important;
+  margin-top: 0.4em !important;
+  margin-bottom: 0.2em !important;
+}
+
+.ce-block .ce-header[data-level="4"],
+.ce-block .ce-header h4 {
+  font-size: 1.5em !important;
+  font-weight: 600 !important;
+  margin-top: 0.3em !important;
+  margin-bottom: 0.2em !important;
+}
+
+/* Make paragraph text more readable */
+.ce-block .ce-paragraph {
+  line-height: 1.7 !important;
+  font-size: 1.05em !important;
+}
+
+/* Style lists nicely with bigger bullets */
+.ce-block .cdx-list {
+  padding-left: 1.5em !important;
+}
+
+.ce-block .cdx-list__item {
+  padding: 0.3em 0 !important;
+  line-height: 1.6 !important;
+}
+
+/* Make bullet points MUCH bigger */
+.ce-block .cdx-list--unordered .cdx-list__item::before {
+  width: 10px !important;
+  height: 10px !important;
+  margin-top: 0.5em !important;
+  background: #000 !important;
+  border-radius: 50% !important;
+}
+
+/* Make numbered list numbers bigger */
+.ce-block .cdx-list--ordered {
+  font-size: 1.05em !important;
+}
+
+/* Quote styling */
+.ce-block .cdx-quote {
+  margin: 1em 0 !important;
+}
+
+.ce-block .cdx-quote__text {
+  font-size: 1.1em !important;
+  line-height: 1.6 !important;
+  font-style: italic !important;
 }

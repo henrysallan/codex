@@ -5,6 +5,7 @@ interface UploadUrlResponse {
   uploadUrl: string;
   key: string;
   publicUrl: string;
+  requiredHeaders?: Record<string, string>;
 }
 
 /**
@@ -23,12 +24,13 @@ async function getUploadUrl(fileName: string, fileType: string): Promise<UploadU
 /**
  * Upload a file to R2 using the presigned URL
  */
-async function uploadToR2(file: File, uploadUrl: string): Promise<void> {
+async function uploadToR2(file: File, uploadUrl: string, requiredHeaders?: Record<string, string>): Promise<void> {
   const response = await fetch(uploadUrl, {
     method: 'PUT',
     body: file,
     headers: {
       'Content-Type': file.type,
+      ...(requiredHeaders || {}),
     },
   });
 
@@ -47,11 +49,11 @@ export async function uploadImage(
   try {
     // Step 1: Get presigned upload URL
     onProgress?.(10);
-    const { uploadUrl, key, publicUrl } = await getUploadUrl(file.name, file.type);
+  const { uploadUrl, key, publicUrl, requiredHeaders } = await getUploadUrl(file.name, file.type);
 
     // Step 2: Upload to R2
     onProgress?.(30);
-    await uploadToR2(file, uploadUrl);
+  await uploadToR2(file, uploadUrl, requiredHeaders);
     
     onProgress?.(70);
 

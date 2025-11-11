@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the resource
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Text items storage - matches any file in user's folder
+    match /text-items/{userId}/{allFiles=**} {
+      // Allow read if authenticated and owner
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // Allow write (create/update) if authenticated and owner
+      allow write: if isAuthenticated() && isOwner(userId);
+
+      // Allow delete if authenticated and owner
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

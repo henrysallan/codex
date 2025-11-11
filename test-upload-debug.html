@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Image Upload to R2 - Debug</title>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+    import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+    import { getFirestore, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC26cwtYcP1_PdH8js-9OLQ4JRjEW8QHJI",
+      authDomain: "codex-1163f.firebaseapp.com",
+      projectId: "codex-1163f",
+      storageBucket: "codex-1163f.firebasestorage.app",
+      messagingSenderId: "286859291851",
+      appId: "1:286859291851:web:de3b05fb4ca60153823f4e",
+      measurementId: "G-0CECX7YMP5"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const functions = getFunctions(app);
+    const db = getFirestore(app);
+
+    let currentFile = null;
+
+    window.handleFileSelect = function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      currentFile = file;
+      
+      // Show preview
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('preview').innerHTML = `
+          <img src="${e.target.result}" style="max-width: 400px; max-height: 400px; border-radius: 8px;">
+          <p><strong>File:</strong> ${file.name}</p>
+          <p><strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB</p>
+          <p><strong>Type:</strong> ${file.type}</p>
+        `;
+        document.getElementById('uploadBtn').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.uploadImage = async function() {
+      if (!currentFile) return;
+
+      const uploadBtn = document.getElementById('uploadBtn');
+      const progress = document.getElementById('progress');
+      const result = document.getElementById('result');
+      
+      uploadBtn.disabled = true;
+      progress.innerHTML = '<p>🔐 Authenticating...</p>';
+      result.innerHTML = '';
+
+      try {
+        // Sign in anonymously
+        await signInAnonymously(auth);
+        progress.innerHTML = '<p>✅ Authenticated</p><p>📝 Getting upload URL...</p>';
+
+        // Get upload URL from Cloud Function
+        const getUploadUrl = httpsCallable(functions, 'getUploadUrl');
+        const urlResponse = await getUploadUrl({ 
+          fileName: currentFile.name, 
+          fileType: currentFile.type 
+        });
+
+        const { uploadUrl, key, publicUrl } = urlResponse.data;
+        
+        // DEBUG: Show the URLs
+        progress.innerHTML += `
+          <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin: 10px 0; font-size: 12px;">
+            <strong>Debug Info:</strong><br>
+            <strong>Upload URL:</strong> ${uploadUrl.substring(0, 100)}...<br>
+            <strong>Public URL:</strong> ${publicUrl}<br>
+            <strong>Key:</strong> ${key}
+          </div>
+        `;
+        
+        progress.innerHTML += '<p>✅ Got upload URL</p><p>⬆️ Uploading to R2...</p>';
+
+        // Upload to R2
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: currentFile,
+          headers: {
+            'Content-Type': currentFile.type,
+          },
+          mode: 'cors',
+        });
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          throw new Error(`Upload failed (${uploadResponse.status}): ${errorText}`);
+        }
+
+        progress.innerHTML += '<p>✅ Uploaded to R2</p><p>💾 Saving to Firestore...</p>';
+
+        // Save to Firestore to trigger auto-tagging
+        const docRef = await addDoc(collection(db, 'items'), {
+          type: 'image',
+          title: currentFile.name,
+          url: publicUrl,
+          key: key,
+          fileType: currentFile.type,
+          size: currentFile.size,
+          createdAt: new Date(),
+          userId: auth.currentUser.uid,
+        });
+
+        progress.innerHTML += '<p>✅ Saved to Firestore</p><p>🤖 AI tagging in progress...</p>';
+
+        result.innerHTML = `
+          <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3 style="color: #2e7d32; margin-top: 0;">✅ Upload Successful!</h3>
+            <p><strong>Document ID:</strong> ${docRef.id}</p>
+            <p><strong>R2 Key:</strong> <code>${key}</code></p>
+            <p><strong>Public URL:</strong><br><a href="${publicUrl}" target="_blank">${publicUrl}</a></p>
+            <img src="${publicUrl}" style="max-width: 100%; margin-top: 10px; border-radius: 4px;" 
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <p style="display:none; color: #d32f2f;">⚠️ Image failed to load - check CORS settings</p>
+            <p style="margin-top: 15px; color: #666;">
+              <em>Note: AI tagging is happening in the background via the processContent function. 
+              Check Firestore in ~10-20 seconds to see aiTitle, aiTags, and aiDescription fields.</em>
+            </p>
+            <a href="https://console.firebase.google.com/project/codex-1163f/firestore/databases/-default-/data/~2Fitems~2F${docRef.id}" 
+               target="_blank" 
+               style="display: inline-block; margin-top: 10px; padding: 10px 20px; background: #1976d2; color: white; text-decoration: none; border-radius: 4px;">
+              View in Firestore Console
+            </a>
+          </div>
+        `;
+
+        uploadBtn.disabled = false;
+        currentFile = null;
+        document.getElementById('fileInput').value = '';
+        document.getElementById('preview').innerHTML = '';
+        progress.innerHTML = '';
+
+      } catch (error) {
+        console.error('Error:', error);
+        result.innerHTML = `
+          <div style="background: #ffebee; padding: 20px; border-radius: 8px; margin-top: 20px;">
+            <h3 style="color: #c62828; margin-top: 0;">❌ Upload Failed</h3>
+            <p><strong>Error:</strong> ${error.message}</p>
+            <details>
+              <summary>Full Error Details</summary>
+              <pre style="background: #fff; padding: 10px; border-radius: 4px; overflow-x: auto;">${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}</pre>
+            </details>
+            <div style="background: #fff3cd; padding: 15px; border-radius: 4px; margin-top: 15px;">
+              <strong>💡 Common Fixes:</strong>
+              <ol style="margin: 10px 0; padding-left: 20px;">
+                <li>Make sure CORS is configured in R2 bucket settings</li>
+                <li>Verify public access is enabled for the bucket</li>
+                <li>Check that the R2.dev domain is correct</li>
+              </ol>
+            </div>
+          </div>
+        `;
+        uploadBtn.disabled = false;
+        progress.innerHTML = '';
+      }
+    };
+  </script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+    }
+    .upload-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      margin: 20px 0;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .upload-area:hover {
+      border-color: #4CAF50;
+      background: #f9f9f9;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      margin-top: 10px;
+    }
+    button:hover:not(:disabled) {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #preview, #progress, #result {
+      margin-top: 20px;
+    }
+    code {
+      background: #eee;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      word-break: break-all;
+    }
+    details {
+      margin-top: 10px;
+    }
+    summary {
+      cursor: pointer;
+      color: #666;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🖼️ Test R2 Image Upload (Debug Mode)</h1>
+    <p>Upload an image to Cloudflare R2 and automatically tag it with AI</p>
+    
+    <label for="fileInput" class="upload-area">
+      <div>
+        <p style="font-size: 48px; margin: 0;">📁</p>
+        <p style="font-size: 18px; margin: 10px 0;">Click to select an image</p>
+        <p style="color: #666; font-size: 14px;">Supports: JPG, PNG, GIF, WebP</p>
+      </div>
+    </label>
+    <input type="file" id="fileInput" accept="image/*" onchange="handleFileSelect(event)">
+    
+    <div id="preview"></div>
+    
+    <button id="uploadBtn" onclick="uploadImage()" disabled>Upload & Auto-Tag with AI</button>
+    
+    <div id="progress"></div>
+    <div id="result"></div>
+
+    <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-radius: 4px;">
+      <h3>⚠️ If you get a network error:</h3>
+      <ol style="margin: 10px 0; padding-left: 20px;">
+        <li>Go to: <a href="https://dash.cloudflare.com/" target="_blank">Cloudflare Dashboard</a> → R2 → <strong>codex-data</strong></li>
+        <li>Click <strong>Settings</strong> tab</li>
+        <li>Scroll to <strong>CORS Policy</strong></li>
+        <li>Make sure it includes <code>https://codex-1163f.web.app</code> in AllowedOrigins</li>
+        <li>Make sure <code>PUT</code> is in AllowedMethods</li>
+      </ol>
+    </div>
+  </div>
+</body>
+</html>

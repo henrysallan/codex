@@ -2,25 +2,31 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // A user can read/write their own user document.
-    // They can only create it if the email matches, and can only update their displayName.
+    // Users collection - users can read/write their own profile
     match /users/{userId} {
       allow read, update: if request.auth.uid == userId;
       allow create: if request.auth.uid == userId && request.resource.data.email == request.auth.token.email;
-      
-      // A user can read/write their own entries subcollection
-      match /entries/{entryId} {
-        allow read, delete: if request.auth.uid == userId;
-        
-        // When writing (creating or updating) an entry...
-        allow write: if request.auth.uid == userId &&
-                      // Ensure the incoming data has the correct format
-                      request.resource.data.title is string &&
-                      request.resource.data.summary is string &&
-                      request.resource.data.content is string &&
-                      request.resource.data.tags is list &&
-                      request.resource.data.userId == request.auth.uid; // Ensure the userId field is correct
-      }
+    }
+
+    // Items collection - users can read/write their own items
+    match /items/{itemId} {
+      allow read: if request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth.uid == resource.data.userId;
+    }
+
+    // Folders collection - users can read/write their own folders
+    match /folders/{folderId} {
+      allow read: if request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth.uid == resource.data.userId;
+    }
+
+    // Collections collection - users can read/write their own collections
+    match /collections/{collectionId} {
+      allow read: if request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth.uid == resource.data.userId;
     }
   }
 }

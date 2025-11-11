@@ -1,19 +1,49 @@
-import { pipeline } from '@xenova/transformers';
+import { pipeline, env } from '@xenova/transformers';
+
+// Configure transformers.js environment
+env.allowLocalModels = false;
+env.allowRemoteModels = true;
 
 let embedder: any = null;
+let initializationPromise: Promise<any> | null = null;
 
 /**
  * Initialize the embedding model
  * Uses Xenova/all-MiniLM-L6-v2 for 384-dimension embeddings
  */
 export async function initializeEmbedder() {
-  if (!embedder) {
-    embedder = await pipeline(
-      'feature-extraction',
-      'Xenova/all-MiniLM-L6-v2'
-    );
+  if (embedder) {
+    return embedder;
   }
-  return embedder;
+
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  initializationPromise = (async () => {
+    try {
+      console.log('Loading embedding model...');
+      embedder = await pipeline(
+        'feature-extraction',
+        'Xenova/all-MiniLM-L6-v2',
+        {
+          progress_callback: (progress: any) => {
+            if (progress.status === 'progress') {
+              console.log(`Model loading: ${progress.file} - ${Math.round(progress.progress)}%`);
+            }
+          }
+        }
+      );
+      console.log('Embedding model loaded successfully!');
+      return embedder;
+    } catch (error) {
+      console.error('Failed to initialize embedder:', error);
+      initializationPromise = null;
+      throw error;
+    }
+  })();
+
+  return initializationPromise;
 }
 
 /**
